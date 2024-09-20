@@ -5,8 +5,7 @@ struct WireView: View {
 
     var body: some View {
         Path { path in
-            guard let firstPoint = wire.path.first else { return }
-            path.move(to: firstPoint)
+            path.move(to: wire.path.first!)
             for point in wire.path.dropFirst() {
                 path.addLine(to: point)
             }

@@ -15,21 +15,26 @@ struct ComponentLibraryView: View {
     ]
 
     var body: some View {
-        VStack {
-            Text("Component Library")
-                .font(.headline)
-                .padding()
-            
-            ScrollView {
-                LazyVStack(spacing: 10) {
-                    ForEach(components, id: \.self) { component in
-                        ComponentItem(name: component)
-                    }
+        ScrollView {
+            VStack(spacing: 10) {
+                Text("Components")
+                    .font(.headline)
+                    .padding(.top)
+                
+                ForEach(components, id: \.self) { component in
+                    Text(component)
+                        .padding(5)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(5)
+                        .onDrag {
+                            NSItemProvider(object: component as NSString)
+                        }
                 }
-                .padding(.horizontal)
             }
+            .padding(5)
         }
-        .frame(width: 200)
         .background(Color.gray.opacity(0.2))
     }
 }

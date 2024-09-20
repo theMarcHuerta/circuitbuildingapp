@@ -14,95 +14,137 @@ struct ContentView: View {
     @State private var previousSelectedTerminal: SelectedTerminal?
     @State private var currentDrag: Component?
     @State private var dropLocation: CGPoint?
-
-    @State private var debugMessage: String = ""
+    @State private var showComponentLibrary = false
+    @State private var scale: CGFloat = 1.0
+    @State private var lastScale: CGFloat = 1.0
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
 
     var body: some View {
         GeometryReader { geometry in
-            HStack(spacing: 0) {
-                ComponentLibraryView()
-                    .frame(width: geometry.size.width * 0.3)
-                ZStack {
-                    GridView()
-                    ForEach(components) { component in
-                        ComponentView(component: component, selectedTerminal: $selectedTerminal)
-                            .position(component.position)
-                            .gesture(
-                                DragGesture()
-                                    .onChanged { value in
-                                        if let index = components.firstIndex(where: { $0.id == component.id }) {
-                                            let newPosition = snapToGrid(value.location)
-                                            components[index].position = newPosition
-                                            components[index].leftTerminal.position = CGPoint(x: newPosition.x - 40, y: newPosition.y)
-                                            components[index].rightTerminal.position = CGPoint(x: newPosition.x + 40, y: newPosition.y)
-                                            currentDrag = components[index]
-                                            updateConnectedWires(for: components[index])
-                                        }
-                                    }
-                                    .onEnded { _ in
-                                        currentDrag = nil
-                                    }
-                            )
-                    }
-                    ForEach(wires) { wire in
-                        WireView(wire: wire)
-                    }
-                }
-                .frame(width: geometry.size.width * 0.7, height: geometry.size.height)
-                .background(Color.white)
-                .gesture(
-                    DragGesture()
-                        .onChanged { value in
-                            if let currentDrag = currentDrag {
-                                if let index = components.firstIndex(where: { $0.id == currentDrag.id }) {
-                                    let newPosition = snapToGrid(value.location)
-                                    components[index].position = newPosition
-                                    components[index].leftTerminal.position = CGPoint(x: newPosition.x - 40, y: newPosition.y)
-                                    components[index].rightTerminal.position = CGPoint(x: newPosition.x + 40, y: newPosition.y)
-                                    updateConnectedWires(for: components[index])
-                                }
+            ZStack {
+                GridView()
+                    .scaleEffect(scale)
+                    .offset(offset)
+                    .gesture(
+                        MagnificationGesture()
+                            .onChanged { value in
+                                let delta = value / self.lastScale
+                                self.lastScale = value
+                                let newScale = self.scale * delta
+                                self.scale = min(max(newScale, 0.5), 3.0)
                             }
+                            .onEnded { _ in
+                                self.lastScale = 1.0
+                            }
+                    )
+                    .gesture(
+                        DragGesture()
+                            .onChanged { value in
+                                self.offset = CGSize(
+                                    width: self.lastOffset.width + value.translation.width,
+                                    height: self.lastOffset.height + value.translation.height
+                                )
+                            }
+                            .onEnded { _ in
+                                self.lastOffset = self.offset
+                            }
+                    )
+                
+                ForEach(wires) { wire in
+                    WireView(wire: wire)
+                        .scaleEffect(scale)
+                        .offset(offset)
+                }
+                
+                ForEach(components) { component in
+                    ComponentView(component: component, selectedTerminal: $selectedTerminal)
+                        .position(component.position)
+                        .scaleEffect(scale)
+                        .offset(offset)
+                        .gesture(
+                            DragGesture()
+                                .onChanged { value in
+                                    if let index = components.firstIndex(where: { $0.id == component.id }) {
+                                        let newPosition = snapToGrid(CGPoint(
+                                            x: (value.location.x - offset.width) / scale,
+                                            y: (value.location.y - offset.height) / scale
+                                        ))
+                                        components[index].position = newPosition
+                                        components[index].leftTerminal.position = CGPoint(x: newPosition.x - 15, y: newPosition.y)
+                                        components[index].rightTerminal.position = CGPoint(x: newPosition.x + 15, y: newPosition.y)
+                                        currentDrag = components[index]
+                                        updateConnectedWires(for: components[index])
+                                    }
+                                }
+                                .onEnded { _ in
+                                    currentDrag = nil
+                                }
+                        )
+                }
+                
+                VStack {
+                    HStack {
+                        Spacer()
+                        Button(action: {
+                            withAnimation {
+                                showComponentLibrary.toggle()
+                            }
+                        }) {
+                            Image(systemName: showComponentLibrary ? "chevron.up" : "chevron.down")
+                                .padding()
+                                .background(Color.blue)
+                                .foregroundColor(.white)
+                                .clipShape(Circle())
                         }
-                        .onEnded { _ in
-                            currentDrag = nil
-                        }
-                )
-                .onDrop(of: ["public.text"], isTargeted: nil) { providers, location in
-                    self.dropLocation = location
-                    _ = providers.first?.loadObject(ofClass: String.self) { string, _ in
-                        if let string = string, let dropLocation = self.dropLocation {
-                            let newComponent = Component(type: string, position: snapToGrid(dropLocation))
-                            components.append(newComponent)
-                            self.dropLocation = nil
-                        }
+                        .padding()
                     }
-                    return true
+                    if showComponentLibrary {
+                        ComponentLibraryView()
+                            .frame(width: geometry.size.width * 0.2, height: geometry.size.height * 0.6)
+                            .background(Color.white.opacity(0.9))
+                            .cornerRadius(10)
+                            .shadow(radius: 5)
+                            .transition(.move(edge: .top))
+                            .position(x: geometry.size.width * 0.9, y: geometry.size.height * 0.3)
+                    }
+                    Spacer()
                 }
             }
-            .edgesIgnoringSafeArea(.all)
+            .frame(width: geometry.size.width, height: geometry.size.height)
+            .background(Color.white)
+            .onDrop(of: ["public.text"], isTargeted: nil) { providers, location in
+                self.dropLocation = CGPoint(
+                    x: (location.x - offset.width) / scale,
+                    y: (location.y - offset.height) / scale
+                )
+                _ = providers.first?.loadObject(ofClass: String.self) { string, _ in
+                    if let string = string, let dropLocation = self.dropLocation {
+                        let newComponent = Component(type: string, position: snapToGrid(dropLocation))
+                        components.append(newComponent)
+                        self.dropLocation = nil
+                    }
+                }
+                return true
+            }
         }
+        .edgesIgnoringSafeArea(.all)
         .onChange(of: selectedTerminal) { _, newValue in
             handleWireCreation()
         }
     }
 
     private func handleWireCreation() {
-        debugMessage = "Handling wire creation..."
         guard let currentTerminal = selectedTerminal else {
             previousSelectedTerminal = nil
-            debugMessage = "No current terminal selected"
             return
         }
 
         if let previousTerminal = previousSelectedTerminal {
-            debugMessage = "Attempting to create wire..."
-            // We have two selected terminals, create a wire
             guard let startComponentIndex = components.firstIndex(where: { $0.id == previousTerminal.componentID }),
                   let endComponentIndex = components.firstIndex(where: { $0.id == currentTerminal.componentID }),
                   startComponentIndex != endComponentIndex else {
-                // Reset if same component or component not found
                 previousSelectedTerminal = currentTerminal
-                debugMessage = "Invalid component selection"
                 return
             }
 
@@ -111,34 +153,23 @@ struct ContentView: View {
             let startPoint = previousTerminal.isLeftTerminal ? startComponent.leftTerminal.position : startComponent.rightTerminal.position
             let endPoint = currentTerminal.isLeftTerminal ? endComponent.leftTerminal.position : endComponent.rightTerminal.position
 
-            debugMessage = "Calculating wire path..."
             let newWire = Wire(startComponentID: startComponent.id,
                                endComponentID: endComponent.id,
                                startIsLeft: previousTerminal.isLeftTerminal,
                                endIsLeft: currentTerminal.isLeftTerminal,
                                startPoint: startPoint,
                                endPoint: endPoint,
-                               existingWires: wires)
-        
-            // Check if the wire path is valid (more than just start and end points)
-            if newWire.path.count > 2 {
-                wires.append(newWire)
+                               existingWires: wires,
+                               components: components)
+            wires.append(newWire)
 
-                // Update component connections
-                components[startComponentIndex].connections.append(endComponent.id)
-                components[endComponentIndex].connections.append(startComponent.id)
-                debugMessage = "Wire created successfully"
-            } else {
-                debugMessage = "Unable to create a valid wire path"
-            }
+            components[startComponentIndex].connections.append(endComponent.id)
+            components[endComponentIndex].connections.append(startComponent.id)
 
-            // Reset selections
             previousSelectedTerminal = nil
             selectedTerminal = nil
         } else {
-            // This is the first selected terminal
             previousSelectedTerminal = currentTerminal
-            debugMessage = "First terminal selected"
         }
     }
 
@@ -147,7 +178,7 @@ struct ContentView: View {
             if wire.startComponentID == component.id || wire.endComponentID == component.id {
                 guard let startComponent = components.first(where: { $0.id == wire.startComponentID }),
                       let endComponent = components.first(where: { $0.id == wire.endComponentID }) else {
-                    return nil // Remove the wire if one of its components no longer exists
+                    return nil
                 }
                 let startPoint = wire.startIsLeft ? startComponent.leftTerminal.position : startComponent.rightTerminal.position
                 let endPoint = wire.endIsLeft ? endComponent.leftTerminal.position : endComponent.rightTerminal.position
@@ -157,14 +188,15 @@ struct ContentView: View {
                             endIsLeft: wire.endIsLeft,
                             startPoint: startPoint,
                             endPoint: endPoint,
-                            existingWires: wires.filter { $0.id != wire.id })
+                            existingWires: wires.filter { $0.id != wire.id },
+                            components: components)
             }
             return wire
         }
     }
 
     private func snapToGrid(_ location: CGPoint) -> CGPoint {
-        let gridSize: CGFloat = 20
+        let gridSize: CGFloat = 10
         let maxX = CGFloat(GridView.columns - 1) * gridSize
         let maxY = CGFloat(GridView.rows - 1) * gridSize
         let x = min(max(round(location.x / gridSize) * gridSize, 0), maxX)

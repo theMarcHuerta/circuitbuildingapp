@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct GridView: View {
-    static let rows = 30
-    static let columns = 30
+    static let rows = 100
+    static let columns = 150
 
     var body: some View {
         GeometryReader { geometry in
