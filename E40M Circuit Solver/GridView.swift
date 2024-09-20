@@ -1,9 +1,9 @@
 import SwiftUI
 
 struct GridView: View {
+    static let gridSize: CGFloat = 14
     static let rows = 100
     static let columns = 150
-    static let gridSize: CGFloat = 15  // Changed to 15x15 grid
 
     var body: some View {
         Path { path in
