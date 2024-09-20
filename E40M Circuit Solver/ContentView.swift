@@ -18,10 +18,10 @@ struct ContentView: View {
     @State private var debugMessage: String = ""
 
     var body: some View {
-        VStack {
-            HStack {
+        GeometryReader { geometry in
+            HStack(spacing: 0) {
                 ComponentLibraryView()
-                    .frame(width: 200)
+                    .frame(width: geometry.size.width * 0.3)
                 ZStack {
                     GridView()
                     ForEach(components) { component in
@@ -48,6 +48,7 @@ struct ContentView: View {
                         WireView(wire: wire)
                     }
                 }
+                .frame(width: geometry.size.width * 0.7, height: geometry.size.height)
                 .background(Color.white)
                 .gesture(
                     DragGesture()
@@ -78,8 +79,7 @@ struct ContentView: View {
                     return true
                 }
             }
-            Text(debugMessage)
-                .padding()
+            .edgesIgnoringSafeArea(.all)
         }
         .onChange(of: selectedTerminal) { _, newValue in
             handleWireCreation()
@@ -143,25 +143,32 @@ struct ContentView: View {
     }
 
     private func updateConnectedWires(for component: Component) {
-        for i in 0..<wires.count {
-            if wires[i].startComponentID == component.id {
-                let startPoint = wires[i].startIsLeft ? component.leftTerminal.position : component.rightTerminal.position
-                let endComponent = components.first(where: { $0.id == wires[i].endComponentID })!
-                let endPoint = wires[i].endIsLeft ? endComponent.leftTerminal.position : endComponent.rightTerminal.position
-                wires[i].path = Wire.calculatePath(from: startPoint, to: endPoint, avoidingWires: wires)
-            } else if wires[i].endComponentID == component.id {
-                let startComponent = components.first(where: { $0.id == wires[i].startComponentID })!
-                let startPoint = wires[i].startIsLeft ? startComponent.leftTerminal.position : startComponent.rightTerminal.position
-                let endPoint = wires[i].endIsLeft ? component.leftTerminal.position : component.rightTerminal.position
-                wires[i].path = Wire.calculatePath(from: startPoint, to: endPoint, avoidingWires: wires)
+        wires = wires.compactMap { wire in
+            if wire.startComponentID == component.id || wire.endComponentID == component.id {
+                guard let startComponent = components.first(where: { $0.id == wire.startComponentID }),
+                      let endComponent = components.first(where: { $0.id == wire.endComponentID }) else {
+                    return nil // Remove the wire if one of its components no longer exists
+                }
+                let startPoint = wire.startIsLeft ? startComponent.leftTerminal.position : startComponent.rightTerminal.position
+                let endPoint = wire.endIsLeft ? endComponent.leftTerminal.position : endComponent.rightTerminal.position
+                return Wire(startComponentID: wire.startComponentID,
+                            endComponentID: wire.endComponentID,
+                            startIsLeft: wire.startIsLeft,
+                            endIsLeft: wire.endIsLeft,
+                            startPoint: startPoint,
+                            endPoint: endPoint,
+                            existingWires: wires.filter { $0.id != wire.id })
             }
+            return wire
         }
     }
 
     private func snapToGrid(_ location: CGPoint) -> CGPoint {
         let gridSize: CGFloat = 20
-        let x = round(location.x / gridSize) * gridSize
-        let y = round(location.y / gridSize) * gridSize
+        let maxX = CGFloat(GridView.columns - 1) * gridSize
+        let maxY = CGFloat(GridView.rows - 1) * gridSize
+        let x = min(max(round(location.x / gridSize) * gridSize, 0), maxX)
+        let y = min(max(round(location.y / gridSize) * gridSize, 0), maxY)
         return CGPoint(x: x, y: y)
     }
 }

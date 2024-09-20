@@ -1,15 +1,15 @@
 import SwiftUI
 
 struct GridView: View {
-    let rows = 20
-    let columns = 20
+    static let rows = 30
+    static let columns = 30
 
     var body: some View {
         GeometryReader { geometry in
-            let gridSize = min(geometry.size.width / CGFloat(columns), geometry.size.height / CGFloat(rows))
+            let gridSize = min(geometry.size.width / CGFloat(Self.columns), geometry.size.height / CGFloat(Self.rows))
             Path { path in
-                for row in 0..<rows {
-                    for column in 0..<columns {
+                for row in 0..<Self.rows {
+                    for column in 0..<Self.columns {
                         let x = CGFloat(column) * gridSize
                         let y = CGFloat(row) * gridSize
                         path.addRect(CGRect(x: x, y: y, width: gridSize, height: gridSize))

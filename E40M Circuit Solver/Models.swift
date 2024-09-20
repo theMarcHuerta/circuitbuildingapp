@@ -84,13 +84,50 @@ struct Wire: Identifiable {
         let endX = Int(end.x / gridSize)
         let endY = Int(end.y / gridSize)
 
+        let maxX = grid[0].count - 1
+        let maxY = grid.count - 1
+
         if startX == endX {
-            for y in min(startY, endY)...max(startY, endY) {
-                grid[y][startX] = 1
+            let minY = max(0, min(startY, endY))
+            let maxY = min(maxY, max(startY, endY))
+            if minY <= maxY {
+                for y in minY...maxY {
+                    grid[y][min(maxX, max(0, startX))] = 1
+                }
             }
         } else if startY == endY {
-            for x in min(startX, endX)...max(startX, endX) {
-                grid[startY][x] = 1
+            let minX = max(0, min(startX, endX))
+            let maxX = min(maxX, max(startX, endX))
+            if minX <= maxX {
+                for x in minX...maxX {
+                    grid[min(maxY, max(0, startY))][x] = 1
+                }
+            }
+        } else {
+            // Handle diagonal lines if needed
+            let dx = abs(endX - startX)
+            let dy = abs(endY - startY)
+            let sx = startX < endX ? 1 : -1
+            let sy = startY < endY ? 1 : -1
+            var err = dx - dy
+            
+            var x = startX
+            var y = startY
+            
+            while true {
+                if x >= 0 && x <= maxX && y >= 0 && y <= maxY {
+                    grid[y][x] = 1
+                }
+                if x == endX && y == endY { break }
+                let e2 = 2 * err
+                if e2 > -dy {
+                    err -= dy
+                    x += sx
+                }
+                if e2 < dx {
+                    err += dx
+                    y += sy
+                }
             }
         }
     }
@@ -120,7 +157,7 @@ struct Wire: Identifiable {
             openSet.remove(current)
             closedSet.insert(current)
 
-            for neighbor in getNeighbors(node: current, grid: grid) {
+            for var neighbor in getNeighbors(node: current, grid: grid) {
                 if closedSet.contains(neighbor) {
                     continue
                 }
@@ -133,10 +170,17 @@ struct Wire: Identifiable {
                     continue
                 }
 
-                cameFrom[neighbor] = current
+                neighbor.parent = (current.x, current.y)
                 neighbor.g = tentativeG
                 neighbor.h = manhattanDistance(from: neighbor, to: endNode)
                 neighbor.f = neighbor.g + neighbor.h
+
+                cameFrom[neighbor] = current
+                
+                if let existingIndex = openSet.firstIndex(of: neighbor) {
+                    openSet.remove(at: existingIndex)
+                }
+                openSet.insert(neighbor)
             }
         }
 
