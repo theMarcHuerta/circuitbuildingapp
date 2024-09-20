@@ -6,17 +6,20 @@ struct ComponentView: View {
 
     var body: some View {
         ZStack {
+            Rectangle()
+                .fill(Color.gray.opacity(0.5))
+                .frame(width: 45, height: 15)
+                .cornerRadius(2)
+            
             Text(component.type)
-                .font(.system(size: 10))
-                .padding(5)
-                .background(Color.gray.opacity(0.5))
-                .cornerRadius(5)
+                .font(.system(size: 8))
+                .foregroundColor(.black)
             
             // Left terminal
             Circle()
                 .fill(terminalColor(isLeft: true))
-                .frame(width: 8, height: 8)
-                .offset(x: -15, y: 0)
+                .frame(width: 6, height: 6)
+                .offset(x: -22.5, y: 0)
                 .onTapGesture {
                     handleTerminalTap(isLeft: true)
                 }
@@ -24,13 +27,13 @@ struct ComponentView: View {
             // Right terminal
             Circle()
                 .fill(terminalColor(isLeft: false))
-                .frame(width: 8, height: 8)
-                .offset(x: 15, y: 0)
+                .frame(width: 6, height: 6)
+                .offset(x: 22.5, y: 0)
                 .onTapGesture {
                     handleTerminalTap(isLeft: false)
                 }
         }
-        .frame(width: 30, height: 20)
+        .offset(x: 7.5, y: 7.5)  // Offset to align with grid intersections
     }
 
     private func terminalColor(isLeft: Bool) -> Color {

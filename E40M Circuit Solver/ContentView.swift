@@ -15,7 +15,7 @@ struct ContentView: View {
     @State private var currentDrag: Component?
     @State private var dropLocation: CGPoint?
     @State private var showComponentLibrary = false
-    @State private var scale: CGFloat = 1.0
+    @State private var scale: CGFloat = 2.0
     @State private var lastScale: CGFloat = 1.0
     @State private var offset: CGSize = .zero
     @State private var lastOffset: CGSize = .zero
@@ -32,7 +32,7 @@ struct ContentView: View {
                                 let delta = value / self.lastScale
                                 self.lastScale = value
                                 let newScale = self.scale * delta
-                                self.scale = min(max(newScale, 0.5), 3.0)
+                                self.scale = min(max(newScale, 0.5), 5.0)
                             }
                             .onEnded { _ in
                                 self.lastScale = 1.0
@@ -59,26 +59,23 @@ struct ContentView: View {
                 
                 ForEach(components) { component in
                     ComponentView(component: component, selectedTerminal: $selectedTerminal)
-                        .position(component.position)
+                        .position(scaledPosition(component.position))
                         .scaleEffect(scale)
-                        .offset(offset)
                         .gesture(
                             DragGesture()
                                 .onChanged { value in
                                     if let index = components.firstIndex(where: { $0.id == component.id }) {
-                                        let newPosition = snapToGrid(CGPoint(
-                                            x: (value.location.x - offset.width) / scale,
-                                            y: (value.location.y - offset.height) / scale
-                                        ))
+                                        let newPosition = snapToGrid(unscaledPosition(value.location))
                                         components[index].position = newPosition
-                                        components[index].leftTerminal.position = CGPoint(x: newPosition.x - 15, y: newPosition.y)
-                                        components[index].rightTerminal.position = CGPoint(x: newPosition.x + 15, y: newPosition.y)
+                                        components[index].leftTerminal.position = CGPoint(x: newPosition.x - 22.5, y: newPosition.y)
+                                        components[index].rightTerminal.position = CGPoint(x: newPosition.x + 22.5, y: newPosition.y)
                                         currentDrag = components[index]
                                         updateConnectedWires(for: components[index])
                                     }
                                 }
                                 .onEnded { _ in
                                     currentDrag = nil
+                                    updateAllWires()
                                 }
                         )
                 }
@@ -114,10 +111,7 @@ struct ContentView: View {
             .frame(width: geometry.size.width, height: geometry.size.height)
             .background(Color.white)
             .onDrop(of: ["public.text"], isTargeted: nil) { providers, location in
-                self.dropLocation = CGPoint(
-                    x: (location.x - offset.width) / scale,
-                    y: (location.y - offset.height) / scale
-                )
+                self.dropLocation = unscaledPosition(location)
                 _ = providers.first?.loadObject(ofClass: String.self) { string, _ in
                     if let string = string, let dropLocation = self.dropLocation {
                         let newComponent = Component(type: string, position: snapToGrid(dropLocation))
@@ -132,6 +126,27 @@ struct ContentView: View {
         .onChange(of: selectedTerminal) { _, newValue in
             handleWireCreation()
         }
+    }
+
+    private func scaledPosition(_ position: CGPoint) -> CGPoint {
+        CGPoint(
+            x: position.x * scale + offset.width,
+            y: position.y * scale + offset.height
+        )
+    }
+
+    private func unscaledPosition(_ position: CGPoint) -> CGPoint {
+        CGPoint(
+            x: (position.x - offset.width) / scale,
+            y: (position.y - offset.height) / scale
+        )
+    }
+
+    private func snapToGrid(_ location: CGPoint) -> CGPoint {
+        let gridSize: CGFloat = 15
+        let x = round(location.x / gridSize) * gridSize
+        let y = round(location.y / gridSize) * gridSize
+        return CGPoint(x: x, y: y)
     }
 
     private func handleWireCreation() {
@@ -159,7 +174,6 @@ struct ContentView: View {
                                endIsLeft: currentTerminal.isLeftTerminal,
                                startPoint: startPoint,
                                endPoint: endPoint,
-                               existingWires: wires,
                                components: components)
             wires.append(newWire)
 
@@ -174,34 +188,32 @@ struct ContentView: View {
     }
 
     private func updateConnectedWires(for component: Component) {
-        wires = wires.compactMap { wire in
+        wires = wires.map { wire in
             if wire.startComponentID == component.id || wire.endComponentID == component.id {
-                guard let startComponent = components.first(where: { $0.id == wire.startComponentID }),
-                      let endComponent = components.first(where: { $0.id == wire.endComponentID }) else {
-                    return nil
-                }
-                let startPoint = wire.startIsLeft ? startComponent.leftTerminal.position : startComponent.rightTerminal.position
-                let endPoint = wire.endIsLeft ? endComponent.leftTerminal.position : endComponent.rightTerminal.position
-                return Wire(startComponentID: wire.startComponentID,
-                            endComponentID: wire.endComponentID,
-                            startIsLeft: wire.startIsLeft,
-                            endIsLeft: wire.endIsLeft,
-                            startPoint: startPoint,
-                            endPoint: endPoint,
-                            existingWires: wires.filter { $0.id != wire.id },
-                            components: components)
+                return updateWire(wire)
             }
             return wire
         }
     }
 
-    private func snapToGrid(_ location: CGPoint) -> CGPoint {
-        let gridSize: CGFloat = 10
-        let maxX = CGFloat(GridView.columns - 1) * gridSize
-        let maxY = CGFloat(GridView.rows - 1) * gridSize
-        let x = min(max(round(location.x / gridSize) * gridSize, 0), maxX)
-        let y = min(max(round(location.y / gridSize) * gridSize, 0), maxY)
-        return CGPoint(x: x, y: y)
+    private func updateAllWires() {
+        wires = wires.map { updateWire($0) }
+    }
+
+    private func updateWire(_ wire: Wire) -> Wire {
+        guard let startComponent = components.first(where: { $0.id == wire.startComponentID }),
+              let endComponent = components.first(where: { $0.id == wire.endComponentID }) else {
+            return wire
+        }
+        let startPoint = wire.startIsLeft ? startComponent.leftTerminal.position : startComponent.rightTerminal.position
+        let endPoint = wire.endIsLeft ? endComponent.leftTerminal.position : endComponent.rightTerminal.position
+        return Wire(startComponentID: wire.startComponentID,
+                    endComponentID: wire.endComponentID,
+                    startIsLeft: wire.startIsLeft,
+                    endIsLeft: wire.endIsLeft,
+                    startPoint: startPoint,
+                    endPoint: endPoint,
+                    components: components)
     }
 }
 
